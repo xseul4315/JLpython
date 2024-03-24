@@ -1,0 +1,97 @@
+import requests
+from lxml import etree
+import tkinter as tk
+from tkinter import ttk
+from datetime import datetime
+
+def fetch_dividends(stock_code):
+    url = f"https://tw.stock.yahoo.com/quote/{stock_code}.TW/dividend"
+    response = requests.get(url)
+    if response.status_code == 200:
+        html = response.text
+        tree = etree.HTML(html)
+        cash_dividend_elements = tree.xpath('//*[@id="main-2-QuoteDividend-Proxy"]/div/section[2]/div[3]/div[2]/div/div/ul/li/div/div[3]/span')
+        stock_dividend_elements = tree.xpath('//*[@id="main-2-QuoteDividend-Proxy"]/div/section[2]/div[3]/div[2]/div/div/ul/li/div/div[4]/span')
+        if cash_dividend_elements and stock_dividend_elements:
+            cash_dividends = [el.text.strip() for el in cash_dividend_elements[:7]]  # 修改為抓取近七年的現金股利資訊
+            stock_dividends = [el.text.strip() for el in stock_dividend_elements[:7]]  # 修改為抓取近七年的股票股利資訊
+            return cash_dividends, stock_dividends
+        else:
+            return None, None
+    else:
+        return None, None
+
+def calculate_average(dividends):
+    valid_dividends = [float(dividend) for dividend in dividends if dividend != "-"]
+    if valid_dividends:
+        average = sum(valid_dividends) / len(valid_dividends)
+        return average
+    else:
+        return None
+
+def show_dividends():
+    stock_code = entry.get()
+    cash_dividends, stock_dividends = fetch_dividends(stock_code)
+    current_year = datetime.now().year
+    if cash_dividends and stock_dividends:
+        table.delete(*table.get_children())
+        for i in range(7):
+            year = current_year - i
+            cash_dividend = cash_dividends[i] if i < len(cash_dividends) else "無資料"
+            stock_dividend = stock_dividends[i] if i < len(stock_dividends) else "無資料"
+            avg_cash_dividend = float(cash_dividend) if cash_dividend != "無資料" else None
+            avg_stock_dividend = float(stock_dividend) if stock_dividend != "無資料" and stock_dividend != "-" else None
+            table.insert("", "end", values=(year, cash_dividend, stock_dividend))
+        total_cash_dividends = [float(dividend) for dividend in cash_dividends if dividend != "無資料"]
+        total_stock_dividends = [float(dividend) for dividend in stock_dividends if dividend != "無資料" and dividend != "-"]
+        avg_cash_dividend = calculate_average(total_cash_dividends)
+        avg_stock_dividend = calculate_average(total_stock_dividends)
+        avg_label_cash.config(text=f"近七年平均現金股利: {avg_cash_dividend:.2f}" if avg_cash_dividend else "無法計算平均現金股利")
+        avg_label_stock.config(text=f"近七年平均股票股利: {avg_stock_dividend:.2f}" if avg_stock_dividend else "無法計算平均股票股利")
+    else:
+        result_label.config(text="無法獲取股利資訊")
+        avg_label_cash.config(text="")
+        avg_label_stock.config(text="")
+
+# 創建視窗
+window = tk.Tk()
+window.title("台股股利查詢")
+window.geometry("600x500")  # 固定視窗尺寸
+
+# 輸入框
+entry_label = tk.Label(window, text="請輸入台股股號：", font=("微軟正黑體", 14))
+entry_label.grid(row=0, column=0, padx=10, pady=10)
+entry = tk.Entry(window, font=("微軟正黑體", 14))
+entry.grid(row=0, column=1, padx=10, pady=10)
+
+# 查詢按鈕
+query_button = tk.Button(window, text="查詢", command=show_dividends, font=("微軟正黑體", 14))
+query_button.grid(row=0, column=2, padx=10, pady=10, sticky="w")
+
+# 表格
+table_frame = tk.Frame(window)
+table_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=10)
+columns = ("年份", "現金股利", "股票股利")
+table = ttk.Treeview(table_frame, columns=columns, show="headings")
+for col in columns:
+    table.heading(col, text=col)
+    table.column(col, anchor="center")  # 將欄位內容置中顯示
+table.pack(side="left", fill="both", expand=True)
+
+# 增加格線
+style = ttk.Style()
+style.theme_use("default")
+style.configure("Treeview", font=("Arial", 12), rowheight=25)
+style.configure("Treeview.Heading", font=("Arial", 12, "bold"))
+style.map("Treeview", background=[("selected", "#f0f0f0"), ("focus", "#ffffff")], foreground=[("selected", "#000000"), ("focus", "#000000")])
+
+# 平均現金股利標籤
+avg_label_cash = tk.Label(window, text="", font=("微軟正黑體", 14))
+avg_label_cash.grid(row=2, column=0, columnspan=3, padx=10, pady=5)
+
+# 平均股票股利標籤
+avg_label_stock = tk.Label(window, text="", font=("微軟正黑體", 14))
+avg_label_stock.grid(row=3, column=0, columnspan=3, padx=10, pady=5)
+
+# 執行視窗循環
+window.mainloop()
